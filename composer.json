@@ -1,0 +1,25 @@
+{
+    "name": "nephifey/cron-scheduler",
+    "type": "library",
+    "description": "Cron scheduler to execute code and/or processes at specific times.",
+    "keywords": ["cron", "expression", "scheduler"],
+    "homepage": "https://github.com/nephifey/cron-scheduler",
+    "license": "GPL-3.0-or-later",
+    "authors": [{
+        "name": "Nathan Phifer",
+        "email": "nathan@visionary.com",
+        "homepage": "https://visionary.com",
+        "role": "Developer"
+    }],
+    "require": {
+        "php": ">=7.4",
+        "nephifey/cron-expression": "^1.0",
+        "symfony/process": "^5.4",
+        "symfony/yaml": "^5.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "CronScheduler\\": "src"
+        }
+    }
+}
