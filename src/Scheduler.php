@@ -6,7 +6,12 @@ use CronExpression\Parser;
 use DateTime;
 use Exception;
 use InvalidArgumentException;
+use LogicException;
 use ReflectionClass;
+use RuntimeException;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Exception\ProcessSignaledException;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
@@ -37,6 +42,14 @@ class Scheduler {
 	 * @var array Scheduled item options, related to the scheduled item by index.
 	 */
 	private array $scheduledItemsOpts;
+
+	/**
+	 * @var array<array{
+	 *      process: Process,
+	 *      wait_callback: null|callable,
+	 *  }> Stores all the processes running in the background.
+	 */
+	private array $waitBackgroundProcesses;
 
 	/**
 	 * @param DateTime|null $date Cron expression parser control arguments.
@@ -72,14 +85,23 @@ class Scheduler {
 	/**
 	 * Runs all the scheduled items.
 	 * @return void
+	 * @throws RuntimeException|LogicException|ProcessTimedOutException|ProcessSignaledException
 	 */
 	public function run(): void {
+		$this->waitBackgroundProcesses = [];
+
 		foreach ($this->scheduledItems as $index => $item) {
 			if ($item instanceof JobInterface)
 				$this->runJob($item, $this->scheduledItemsOpts[$index]);
 			elseif ($item instanceof Process)
 				$this->runProcess($item, $this->scheduledItemsOpts[$index]);
 		}
+
+		foreach ($this->waitBackgroundProcesses as $backgroundProcess) {
+			$backgroundProcess["process"]->wait($backgroundProcess["wait_callback"]);
+		}
+
+		unset($this->waitBackgroundProcesses);
 	}
 
 	/**
@@ -97,13 +119,37 @@ class Scheduler {
 	 * @param Process $process The process to run.
 	 * @param array $opts Configurable options.
 	 * @return void
+	 * @throws RuntimeException|LogicException|ProcessTimedOutException|ProcessSignaledException
 	 */
 	private function runProcess(Process $process, array $opts = []): void {
-		if (isset($opts["background"])) {
-			$process->start();
+		$runCallback = (isset($opts["run_callback"]) && is_callable($opts["run_callback"])
+			? $opts["run_callback"]
+			: null
+		);
+
+		$waitCallback = (isset($opts["wait_callback"]) && is_callable($opts["wait_callback"])
+			? $opts["wait_callback"]
+			: null
+		);
+
+		if ($process->isRunning())
 			return;
+
+		if (isset($opts["background"])) {
+			$process->start($runCallback);
+
+			if (isset($opts["wait_background"]) || !is_null($waitCallback)) {
+				$this->waitBackgroundProcesses[] = [
+					"process" => $process,
+					"wait_callback" => $waitCallback,
+				];
+			}
+		} else
+			$process->run($runCallback);
+
+		if (!$process->isRunning()) {
+			throw new ProcessFailedException($process);
 		}
-		$process->run();
 	}
 
 	/**
@@ -137,7 +183,7 @@ class Scheduler {
 	 * @param string $filename The path to the YAML file to be parsed.
 	 * @param int $flags A bit field of PARSE_* constants to customize the YAML parser behavior.
 	 * @return self
-	 * @throws ParseException|Exception
+	 * @throws Exception|InvalidArgumentException|ParseException
 	 */
 	static public function createFromYamlFile(string $filename, int $flags = 0): self {
 		$value = Yaml::parseFile($filename, $flags);
@@ -172,6 +218,7 @@ class Scheduler {
 									$filename, $job, JobInterface::class,
 								));
 							}
+
 							$self->schedule($expression, $reflectionClass->newInstance());
 						}
 						break;
