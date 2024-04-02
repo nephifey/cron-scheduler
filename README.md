@@ -23,9 +23,14 @@ composer require nephifey/cron-scheduler
 
 ## Usage
 
+```php
+* * * * * apache php crontab.php > /dev/null 2>&1
+```
+
 ### Basic Example
 
 ```php
+# crontab.php
 require_once "vendor/autoload.php";
 
 $job1 = new class implements \CronScheduler\JobInterface {
@@ -54,20 +59,6 @@ $scheduler->run();
 ```
 
 ### YAML Example
-
-```yaml
-# crontab.yaml
-"* * * * *":
-  jobs:
-    - ExampleClass1
-    - ExampleClass2
-"*/5 * * * *":
-  jobs:
-    - ExampleClass3
-"@daily":
-  commands:
-    - php expensive_task.php # ran in background
-```
 
 ```php
 # crontab.php
@@ -98,4 +89,18 @@ class ExampleClass3 implements \CronScheduler\JobInterface {
 # expensive_task.php
 
 // do your expensive task in a separate script execution asynchronously.
+```
+
+```yaml
+# crontab.yaml
+"* * * * *":
+  jobs:
+    - ExampleClass1
+    - ExampleClass2
+"*/5 * * * *":
+  jobs:
+    - ExampleClass3
+"@daily":
+  commands:
+    - php expensive_task.php # ran in background
 ```
